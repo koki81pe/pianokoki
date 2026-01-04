@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Piano Koki</title>
+    <title>Piano Koki - Samples Reales</title>
     <style>
         * {
             margin: 0;
@@ -193,6 +193,36 @@
             display: block;
         }
         
+        .version-badge {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #FF5722;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .loading-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 16px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .loading-message.show {
+            display: block;
+        }
+        
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
@@ -200,6 +230,9 @@
     </style>
 </head>
 <body>
+    <div class="version-badge">Piano Real</div>
+    <div class="loading-message" id="loadingMessage">Cargando samples de piano...</div>
+    
     <h1>Piano Koki</h1>
     
     <div class="controls">
@@ -224,187 +257,96 @@
         Usa las teclas de tu teclado: a-s-d-f-g-h-j-k-l-ñ-{-}-4-5-6 (blancas) | w-e-t-y-u-i-o-p-'-+ (negras)
     </p>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script>
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Mostrar mensaje de carga
+        document.getElementById('loadingMessage').classList.add('show');
         
-        // Crear reverberación para dar profundidad al sonido
-        const convolver = audioContext.createConvolver();
-        const reverbGain = audioContext.createGain();
-        reverbGain.gain.value = 0.15; // Reverberación sutil
-        
-        // Crear impulso de reverberación simple
-        const reverbTime = 1.5;
-        const sampleRate = audioContext.sampleRate;
-        const length = sampleRate * reverbTime;
-        const impulse = audioContext.createBuffer(2, length, sampleRate);
-        
-        for (let channel = 0; channel < 2; channel++) {
-            const channelData = impulse.getChannelData(channel);
-            for (let i = 0; i < length; i++) {
-                channelData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+        // Crear sampler con samples reales de piano
+        const sampler = new Tone.Sampler({
+            urls: {
+                "A0": "A0.mp3", "C1": "C1.mp3", "D#1": "Ds1.mp3",
+                "F#1": "Fs1.mp3", "A1": "A1.mp3", "C2": "C2.mp3",
+                "D#2": "Ds2.mp3", "F#2": "Fs2.mp3", "A2": "A2.mp3",
+                "C3": "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3",
+                "A3": "A3.mp3", "C4": "C4.mp3", "D#4": "Ds4.mp3",
+                "F#4": "Fs4.mp3", "A4": "A4.mp3", "C5": "C5.mp3",
+                "D#5": "Ds5.mp3", "F#5": "Fs5.mp3", "A5": "A5.mp3",
+                "C6": "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3",
+                "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3",
+                "F#7": "Fs7.mp3", "A7": "A7.mp3", "C8": "C8.mp3"
+            },
+            release: 1,
+            baseUrl: "https://tonejs.github.io/audio/salamander/",
+            onload: () => {
+                // Ocultar mensaje de carga cuando termine
+                document.getElementById('loadingMessage').classList.remove('show');
+                console.log('Piano samples cargados correctamente');
             }
-        }
-        convolver.buffer = impulse;
-        convolver.connect(reverbGain);
-        reverbGain.connect(audioContext.destination);
+        }).toDestination();
         
-        const oscillators = {};
         const pressedKeys = new Set();
+        const activeNotes = {};
         let configMode = false;
         let selectedKeyIndex = null;
         let selectedKeyType = null;
 
         const defaultWhiteKeys = [
-            { note: 'Do', key: 'a', freq: 261.63 },
-            { note: 'Re', key: 's', freq: 293.66 },
-            { note: 'Mi', key: 'd', freq: 329.63 },
-            { note: 'Fa', key: 'f', freq: 349.23 },
-            { note: 'Sol', key: 'g', freq: 392.00 },
-            { note: 'La', key: 'h', freq: 440.00 },
-            { note: 'Si', key: 'j', freq: 493.88 },
-            { note: 'Do', key: 'k', freq: 523.25 },
-            { note: 'Re', key: 'l', freq: 587.33 },
-            { note: 'Mi', key: 'ñ', freq: 659.25 },
-            { note: 'Fa', key: '{', freq: 698.46 },
-            { note: 'Sol', key: '}', freq: 783.99 },
-            { note: 'La', key: '4', freq: 880.00 },
-            { note: 'Si', key: '5', freq: 987.77 },
-            { note: 'Do', key: '6', freq: 1046.50 },
+            { note: 'Do', key: 'a', freq: 'C4' },
+            { note: 'Re', key: 's', freq: 'D4' },
+            { note: 'Mi', key: 'd', freq: 'E4' },
+            { note: 'Fa', key: 'f', freq: 'F4' },
+            { note: 'Sol', key: 'g', freq: 'G4' },
+            { note: 'La', key: 'h', freq: 'A4' },
+            { note: 'Si', key: 'j', freq: 'B4' },
+            { note: 'Do', key: 'k', freq: 'C5' },
+            { note: 'Re', key: 'l', freq: 'D5' },
+            { note: 'Mi', key: 'ñ', freq: 'E5' },
+            { note: 'Fa', key: '{', freq: 'F5' },
+            { note: 'Sol', key: '}', freq: 'G5' },
+            { note: 'La', key: '4', freq: 'A5' },
+            { note: 'Si', key: '5', freq: 'B5' },
+            { note: 'Do', key: '6', freq: 'C6' },
         ];
 
         const defaultBlackKeys = [
-            { note: 'Di', key: 'w', freq: 277.18, position: 0.5 },
-            { note: 'Ri', key: 'e', freq: 311.13, position: 1.5 },
-            { note: 'Fi', key: 't', freq: 369.99, position: 3.5 },
-            { note: 'Sil', key: 'y', freq: 415.30, position: 4.5 },
-            { note: 'Li', key: 'u', freq: 466.16, position: 5.5 },
-            { note: 'Di', key: 'i', freq: 554.37, position: 7.5 },
-            { note: 'Ri', key: 'o', freq: 622.25, position: 8.5 },
-            { note: 'Fi', key: 'p', freq: 739.99, position: 10.5 },
-            { note: 'Sil', key: "'", freq: 830.61, position: 11.5 },
-            { note: 'Li', key: '+', freq: 932.33, position: 12.5 },
+            { note: 'Di', key: 'w', freq: 'C#4', position: 0.5 },
+            { note: 'Ri', key: 'e', freq: 'D#4', position: 1.5 },
+            { note: 'Fi', key: 't', freq: 'F#4', position: 3.5 },
+            { note: 'Sil', key: 'y', freq: 'G#4', position: 4.5 },
+            { note: 'Li', key: 'u', freq: 'A#4', position: 5.5 },
+            { note: 'Di', key: 'i', freq: 'C#5', position: 7.5 },
+            { note: 'Ri', key: 'o', freq: 'D#5', position: 8.5 },
+            { note: 'Fi', key: 'p', freq: 'F#5', position: 10.5 },
+            { note: 'Sil', key: "'", freq: 'G#5', position: 11.5 },
+            { note: 'Li', key: '+', freq: 'A#5', position: 12.5 },
         ];
 
-        let whiteKeys = JSON.parse(localStorage.getItem('whiteKeys')) || [...defaultWhiteKeys];
-        let blackKeys = JSON.parse(localStorage.getItem('blackKeys')) || [...defaultBlackKeys];
+        let whiteKeys = JSON.parse(localStorage.getItem('whiteKeys_samples')) || [...defaultWhiteKeys];
+        let blackKeys = JSON.parse(localStorage.getItem('blackKeys_samples')) || [...defaultBlackKeys];
 
         function saveConfig() {
-            localStorage.setItem('whiteKeys', JSON.stringify(whiteKeys));
-            localStorage.setItem('blackKeys', JSON.stringify(blackKeys));
+            localStorage.setItem('whiteKeys_samples', JSON.stringify(whiteKeys));
+            localStorage.setItem('blackKeys_samples', JSON.stringify(blackKeys));
         }
 
-        function playNote(key, freq) {
-            // Si la nota ya está sonando, detenerla completamente primero
-            if (oscillators[key]) {
-                const oldOscData = oscillators[key];
-                
-                // Cancelar timeout pendiente si existe
-                if (oldOscData.timeoutId) {
-                    clearTimeout(oldOscData.timeoutId);
-                }
-                
-                // Detener osciladores inmediatamente
-                oldOscData.gainNode.gain.cancelScheduledValues(audioContext.currentTime);
-                oldOscData.gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                
-                oldOscData.oscillators.forEach(osc => {
-                    try { 
-                        osc.stop(audioContext.currentTime);
-                    } catch(e) {}
-                });
-                
-                delete oscillators[key];
+        async function playNote(key, noteFreq) {
+            await Tone.start();
+            
+            if (activeNotes[key]) {
+                sampler.triggerRelease(activeNotes[key]);
+                delete activeNotes[key];
             }
-
-            const ctx = audioContext;
-            const now = ctx.currentTime;
             
-            // Crear nodo de ganancia principal con ADSR
-            const mainGain = ctx.createGain();
-            
-            // ADSR Envelope para piano realista
-            const attackTime = 0.002;  // Ataque muy rápido (martillo golpea)
-            const decayTime = 0.3;     // Decaimiento medio
-            const sustainLevel = 0.4;  // Nivel de sostenido (40%)
-            const peakLevel = 0.5;     // Volumen máximo inicial
-            
-            // Configurar ADSR
-            mainGain.gain.setValueAtTime(0, now);
-            mainGain.gain.linearRampToValueAtTime(peakLevel, now + attackTime);
-            mainGain.gain.exponentialRampToValueAtTime(sustainLevel, now + attackTime + decayTime);
-            
-            // Crear osciladores para armónicos (sonido más rico)
-            const oscillators_array = [];
-            
-            // Oscilador fundamental (principal)
-            const osc1 = ctx.createOscillator();
-            osc1.type = 'triangle'; // Más suave que sine
-            osc1.frequency.setValueAtTime(freq, now);
-            const gain1 = ctx.createGain();
-            gain1.gain.value = 1.0;
-            osc1.connect(gain1);
-            gain1.connect(mainGain);
-            oscillators_array.push(osc1);
-            
-            // Segundo armónico (octava arriba, más sutil)
-            const osc2 = ctx.createOscillator();
-            osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(freq * 2, now);
-            const gain2 = ctx.createGain();
-            gain2.gain.value = 0.15; // Más sutil
-            osc2.connect(gain2);
-            gain2.connect(mainGain);
-            oscillators_array.push(osc2);
-            
-            // Tercer armónico (quinta arriba)
-            const osc3 = ctx.createOscillator();
-            osc3.type = 'sine';
-            osc3.frequency.setValueAtTime(freq * 3, now);
-            const gain3 = ctx.createGain();
-            gain3.gain.value = 0.08;
-            osc3.connect(gain3);
-            gain3.connect(mainGain);
-            oscillators_array.push(osc3);
-            
-            // Conectar a destino y reverberación
-            mainGain.connect(ctx.destination);
-            mainGain.connect(convolver);
-            
-            // Iniciar todos los osciladores
-            oscillators_array.forEach(osc => osc.start(now));
-            
-            oscillators[key] = { 
-                oscillators: oscillators_array, 
-                gainNode: mainGain,
-                timeoutId: null
-            };
+            sampler.triggerAttack(noteFreq);
+            activeNotes[key] = noteFreq;
         }
 
         function stopNote(key) {
-            const oscData = oscillators[key];
-            if (!oscData) return;
-
-            const { oscillators: oscs, gainNode } = oscData;
-            const ctx = audioContext;
-            const now = ctx.currentTime;
-            
-            // Release: desvanecimiento suave del piano
-            const releaseTime = 0.5;
-            gainNode.gain.cancelScheduledValues(now);
-            gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + releaseTime);
-            
-            const timeoutId = setTimeout(() => {
-                // Solo limpiar si este es todavía el oscilador activo para esta tecla
-                if (oscillators[key] && oscillators[key].timeoutId === timeoutId) {
-                    oscs.forEach(osc => {
-                        try { osc.stop(); } catch(e) {}
-                    });
-                    delete oscillators[key];
-                }
-            }, releaseTime * 1000 + 100);
-            
-            oscData.timeoutId = timeoutId;
+            if (activeNotes[key]) {
+                sampler.triggerRelease(activeNotes[key]);
+                delete activeNotes[key];
+            }
         }
 
         function handleKeyDown(key) {
